@@ -3,8 +3,8 @@
 show_mdstat() { section 'Linux md RAID: /proc/mdstat'; show_or_unavailable /proc/mdstat; }
 show_md_health_summary() {
   section 'RAID membership summary (read-only)'
-  local md expected degraded active action found=0
-  for md in /sys/block/md[0-9]*; do
+  local md expected degraded active action found=0 root="${1:-/sys/block}"
+  for md in "$root"/md[0-9]*; do
     [[ -d "$md/md" && -r "$md/md/raid_disks" && -r "$md/md/degraded" ]] || continue
     found=1
     IFS= read -r expected < "$md/md/raid_disks"
