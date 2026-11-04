@@ -13,7 +13,7 @@ show_critical() {
   [[ -r "$DSM_DISK_DB" ]] || { warn 'DSM disk log database unavailable.'; return 0; }
   has sqlite3 || { warn 'sqlite3 unavailable'; return 0; }
   sqlite3 -header -column "$DSM_DISK_DB" \
-    "SELECT rowid,datetime,level,msg,model,serial FROM logs WHERE level='err' AND msg='status_critical' ORDER BY rowid DESC LIMIT 100;" 2>&1 || warn 'Error reading DSM disk log database.'
+    "SELECT rowid,time,level,msg,model,serial FROM logs WHERE level='err' AND msg='status_critical' ORDER BY rowid DESC LIMIT 100;" 2>&1 || warn 'Error reading DSM disk log database.'
 }
 pool_fault_summary() {
   if [[ -r /run/space/space_table ]] && has python3; then
@@ -49,7 +49,7 @@ clear_status_critical() {
   printf '\nEnter the numeric rowid of ONE record to clear (blank to cancel): '
   IFS= read -r rowid || return 1
   [[ "$rowid" =~ ^[1-9][0-9]{0,12}$ ]] || { info 'Cancelled or invalid rowid'; return 1; }
-  selected=$(sqlite3 -separator ' | ' "$DSM_DISK_DB" "SELECT rowid,model,serial,datetime FROM logs WHERE rowid=$rowid AND level='err' AND msg='status_critical';") || return 1
+  selected=$(sqlite3 -separator ' | ' "$DSM_DISK_DB" "SELECT rowid,model,serial,time FROM logs WHERE rowid=$rowid AND level='err' AND msg='status_critical';") || return 1
   [[ -n "$selected" ]] || { warn 'Selected row no longer exists'; return 1; }
   printf 'Selected DSM log row: %s\n' "$selected"
   info 'This removes ONE stored log alert. It does not change pool metadata, SMART state or an active hardware fault.'
