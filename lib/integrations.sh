@@ -96,4 +96,4 @@ fault_apply() {
   confirm APPLY_PRIVATE_STORAGE_REPAIR 'Run separately authorized, build-specific private backend apply?' || return 1
   python3 "$FAULT_ENGINE" --live --apply --authorization-file "$auth"
 }
-fault_verify() { show_pool_faults; show_mdstat; fault_history; info 'Observations alone are not proof of successful repair.'; }
+fault_verify() { show_pool_faults; show_mdstat; show_drive_led_status; fault_history; info 'Observations alone are not proof of successful repair.'; }
