@@ -67,6 +67,11 @@ class InstallerParentPermissions(unittest.TestCase):
     def test_original_synology_root_root_775_allowed_quietly(self):
         self.check_parent('775', '0', '0', allow=True)
 
+    def test_installer_success_message_is_informational(self):
+        script = INSTALL.read_text()
+        self.assertIn("INFO: No DSM maintenance or repair action was executed.", script)
+        self.assertNotIn("WARNING:", script)
+
     def test_standard_755_allowed(self):
         self.check_parent('755', '0', '0', allow=True)
 
