@@ -1,0 +1,15 @@
+# Private extensions and local artifacts must never be published.
+/private/
+/.env
+*.pyc
+__pycache__/
+.DS_Store
+state/
+report-*.txt
+*.backup.*
+*.tar.gz
+*.zip
+# NAS support captures, archives and credentials
+*authorization*.json
+*.key
+*.pem
