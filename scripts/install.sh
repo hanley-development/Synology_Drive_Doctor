@@ -115,3 +115,4 @@ find "$TEMP/stage" -type d -exec chmod 755 {} \;
 mv "$TEMP/stage" "$DEST"
 printf '\nInstalled to %s\n' "$DEST"
 printf 'Next (read-only): cd %s && bash -n syno_drive_doctor.sh lib/*.sh && bash syno_drive_doctor.sh health\n' "$DEST"
+printf 'INFO: No DSM maintenance or repair action was executed.\n'
