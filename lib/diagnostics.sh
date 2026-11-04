@@ -160,7 +160,7 @@ btrfs_counter_diff() {
     if (!seen) print "  No comparable numeric counters (unavailable)."
     else if (!increased && !invalid) print "  No increases observed in this short sample."
   }
-    ' <(printf '%s\\n' "$before") <(printf '%s\\n' "$after")
+    ' <(printf '%s\n' "$before") <(printf '%s\n' "$after")
 }
 
 show_btrfs() {
