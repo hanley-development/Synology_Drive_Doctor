@@ -5,6 +5,7 @@
 ## What it does
 
 - System Health Dashboard, drive/SMART reports, RAID/storage topology, Btrfs and SSD-cache status, DSM storage event logs, diagnostic export.
+- Read-only LED controller snapshots during post-repair verification, device-serial reporting without assumed bay numbers, configured RAID membership summaries, and short-interval Btrfs error-counter comparisons.
 - Menu-based maintenance for SMART self-tests and bounded file reads; actions require a terminal and explicit confirmation.
 - Option to clear **one selected DSM `status_critical` historical alert** after making an online SQLite backup. This only affects historical alert records, **not** active drive faults, pool metadata, disk health or LED control.
 - Original upstream [007revad/Synology_HDD_db](https://github.com/007revad/Synology_HDD_db) remains its own Git submodule, pinned to an upstream commit. Executing its compatibility updater requires explicit opt-in.
