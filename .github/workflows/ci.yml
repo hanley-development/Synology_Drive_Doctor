@@ -1,0 +1,17 @@
+name: Drive Doctor CI
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  offline-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout public source
+        uses: actions/checkout@v4
+      - name: Verify shell syntax and unit tests
+        run: |
+          bash -n syno_drive_doctor.sh lib/*.sh
+          sh -n scripts/install.sh
+          python3 -m unittest discover -s tests -v

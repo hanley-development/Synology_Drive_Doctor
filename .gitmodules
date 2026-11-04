@@ -1,0 +1,3 @@
+[submodule "integrations/Synology_HDD_db"]
+	path = integrations/Synology_HDD_db
+	url = https://github.com/007revad/Synology_HDD_db.git
