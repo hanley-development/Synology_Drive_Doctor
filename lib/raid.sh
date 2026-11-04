@@ -1,6 +1,34 @@
 #!/usr/bin/env bash
 # RAID, storage and md metadata readbacks. No mdadm mutations.
 show_mdstat() { section 'Linux md RAID: /proc/mdstat'; show_or_unavailable /proc/mdstat; }
+show_md_health_summary() {
+  section 'RAID membership summary (read-only)'
+  local md expected degraded active action found=0
+  for md in /sys/block/md[0-9]*; do
+    [[ -d "$md/md" && -r "$md/md/raid_disks" && -r "$md/md/degraded" ]] || continue
+    found=1
+    IFS= read -r expected < "$md/md/raid_disks"
+    IFS= read -r degraded < "$md/md/degraded"
+    if [[ "$expected" =~ ^[0-9]+$ && "$degraded" =~ ^[0-9]+$ ]] && (( degraded <= expected )); then
+      active=$((expected - degraded))
+      if ((degraded == 0)); then
+        printf '%s: %s/%s configured members present; md reports no missing members\n' "${md##*/}" "$active" "$expected"
+      else
+        printf '%s: %s/%s configured members present; md reports %s missing member(s)\n' "${md##*/}" "$active" "$expected" "$degraded"
+      fi
+    else
+      printf '%s: unreadable or unexpected membership counters (configured=%s missing=%s)\n' "${md##*/}" "$expected" "$degraded"
+    fi
+    if [[ -r "$md/md/sync_action" ]]; then
+      IFS= read -r action < "$md/md/sync_action"
+      printf '  sync_action=%s\n' "$action"
+    fi
+  done
+  ((found)) || info 'No md RAID membership counters are available.'
+  info 'An array missing configured members is not necessarily losing data: check whether a physical bay is intentionally empty.'
+  info 'This summary does not establish DSM storage-pool health or drive LED state.'
+}
+
 show_md_detail() {
   section 'mdadm detail (read-only)'
   if ! has mdadm; then warn 'mdadm unavailable'; return 0; fi
@@ -68,16 +96,8 @@ except Exception as e:
 PY
 }
 show_degraded() {
-  section 'Current RAID degradation overview'
-  local found=0 d state
-  for d in /sys/block/md[0-9]*; do
-    [[ -r "$d/md/degraded" ]] || continue
-    state=$(cat "$d/md/degraded")
-    printf '%s: degraded=%s\n' "${d##*/}" "$state"
-    [[ "$state" == '0' ]] || found=1
-  done
-  [[ "$found" == 0 ]] && info 'No current degraded members reported by available md sysfs counters.' || warn 'One or more arrays show degradation.'
-  info 'Read the corresponding mdadm member list; never infer an empty fifth bay is a fault.'
+  show_md_health_summary
+  info 'Check member roles and populated bays before interpreting configured-member gaps as disk failures.'
 }
 show_topology() {
   show_md_members
