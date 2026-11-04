@@ -139,6 +139,30 @@ show_volume_info() {
   if has df; then df -h 2>&1 || :; fi
   if has mount; then mount | grep -E '/volume[0-9]|cachedev' || :; fi
 }
+btrfs_counter_diff() {
+  local before="$1" after="$2"
+  awk '
+  FNR==NR {
+    if ($1 ~ /^\[[^]]+\]\.(read_io_errs|write_io_errs|flush_io_errs|corruption_errs|generation_errs)$/ && $2 ~ /^[0-9]+$/) old[$1]=$2
+    next
+  }
+  ($1 in old) && $2 ~ /^[0-9]+$/ {
+    seen++
+    if ($2 < old[$1]) {
+      printf "  %s: counter decreased/reset (comparison invalid)\n", $1
+      invalid++
+    } else if ($2 > old[$1]) {
+      printf "  %s: +%.0f\n", $1, $2-old[$1]
+      increased++
+    }
+  }
+  END {
+    if (!seen) print "  No comparable numeric counters (unavailable)."
+    else if (!increased && !invalid) print "  No increases observed in this short sample."
+  }
+    ' <(printf '%s\\n' "$before") <(printf '%s\\n' "$after")
+}
+
 show_btrfs() {
   section 'Btrfs device error counters (NO -z/reset)'
   local v found=0 before after
@@ -153,34 +177,15 @@ show_btrfs() {
     sleep 2
     after=$(btrfs device stats "$v" 2>&1) || { warn 'Second Btrfs counter read failed; no delta available'; continue; }
     printf 'Counter changes during a 2-second read-only sample:\n'
-    awk '
-      FNR==NR {
-        if ($1 ~ /^\[[^]]+\]\.(read_io_errs|write_io_errs|flush_io_errs|corruption_errs|generation_errs)$/ && $2 ~ /^[0-9]+$/) old[$1]=$2
-        next
-      }
-      ($1 in old) && $2 ~ /^[0-9]+$/ {
-        seen++
-        if ($2 < old[$1]) {
-          printf "  %s: counter decreased/reset (comparison invalid)\n", $1
-          invalid++
-        } else if ($2 > old[$1]) {
-          printf "  %s: +%.0f\n", $1, $2-old[$1]
-          increased++
-        }
-      }
-      END {
-        if (!seen) print "  No comparable numeric counters (unavailable)."
-        else if (!increased && !invalid) print "  No increases observed in this short sample."
-      }
-    ' <(printf '%s\n' "$before") <(printf '%s\n' "$after")
+    btrfs_counter_diff "$before" "$after"
   done
   ((found)) || warn 'No accessible /volumeN mounts.'
   info 'A short no-increase result does not exclude intermittent errors; compare longer-term observations if needed.'
 }
 show_drive_led_status() {
   section 'Drive LED controller (read-only sysfs snapshot)'
-  local led brightness max_brightness trigger found=0
-  for led in /sys/class/leds/syno_led*; do
+  local led brightness max_brightness trigger found=0 root="${1:-/sys/class/leds}"
+  for led in "$root"/syno_led*; do
     [[ -d "$led" ]] || continue
     if [[ ! -r "$led/brightness" ]]; then
       warn "Unreadable LED state: ${led##*/}"
