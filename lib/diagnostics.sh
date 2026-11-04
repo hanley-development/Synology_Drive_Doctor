@@ -122,6 +122,31 @@ show_btrfs() {
   done
   ((found==1)) || warn 'No accessible /volumeN mounts.'
 }
+show_drive_led_status() {
+  section 'Drive LED controller (read-only sysfs snapshot)'
+  local led brightness max_brightness trigger found=0
+  for led in /sys/class/leds/syno_led*; do
+    [[ -d "$led" ]] || continue
+    if [[ ! -r "$led/brightness" ]]; then
+      warn "Unreadable LED state: ${led##*/}"
+      continue
+    fi
+    IFS= read -r brightness < "$led/brightness" || { warn "Could not read ${led##*/}"; continue; }
+    max_brightness='?'
+    if [[ -r "$led/max_brightness" ]]; then
+      IFS= read -r max_brightness < "$led/max_brightness" || max_brightness='?'
+    fi
+    trigger='unavailable'
+    if [[ -r "$led/trigger" ]]; then
+      IFS= read -r trigger < "$led/trigger" || trigger='unavailable'
+    fi
+    printf '%-12s brightness=%s/%s trigger=%s\n' "${led##*/}" "$brightness" "$max_brightness" "$trigger"
+    found=1
+  done
+  ((found != 0)) || info 'No readable syno_led* controls exposed; LED state unavailable.'
+  info 'Controller snapshot only: brightness/trigger may not match visible light; LED index, color and bay mapping are model-specific.'
+}
+
 show_quick_hints() {
   section 'Quick diagnosis hints'
   info 'RAID: compare [UUUU] member status with expected populated slots. An unpopulated bay is not necessarily a failed member.'
