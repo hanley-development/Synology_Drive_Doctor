@@ -12,7 +12,10 @@ sudo sh drive-doctor-install.sh
 
 The installer downloads **two** GitHub source archives: the public Drive Doctor code and the **exact pinned commit** of the unmodified upstream HDD DB, then stages them into a new directory. NAS does not need Git or Python for basic diagnostics. The installer requires `wget` or `curl`, `tar`, and working HTTPS certificates.
 
-Default destination: `/volume1/scripts/Synology_Drive_Doctor_v0.3.0-rc1`. It refuses an existing destination or symlink, and does not overwrite existing installations. Stage first; run **read-only** checks before running the interactive menu.
+Default destination: `/volume1/scripts/Synology_Drive_Doctor_v0.3.0-rc1`. It refuses an existing destination or symlink, and does not overwrite existing installations. The installer accepts a `775 root:root` parent (for example `/volume1/scripts`) with a warning, **provided group 0 contains only trusted administrators**. It still rejects world-writable parents and group-writable parents not owned by UID/GID 0. The installed application remains root-owned and non-group-writable. If you previously downloaded the installer with `sudo wget`, it may be unreadable to your normal shell because root used a restrictive umask; review it using `sudo cat drive-doctor-install.sh` or make that file readable with `sudo chmod 644 drive-doctor-install.sh`.
+
+The installer only checks the immediate parent directory. Do not use a parent under a writable-by-untrusted-user ancestor. Changing `/volume1/scripts` from `775` to `755` is **not required** for the documented root:root layout.
+ Stage first; run **read-only** checks before running the interactive menu.
 
 Do **not** use an unauthenticated HTTP URL, disable TLS verification, or pipe an unread installer directly into a root shell. The source archives are retrieved over HTTPS; an independent archive signature/checksum is not provided in this candidate, so review before installing on a production NAS.
 

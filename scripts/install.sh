@@ -38,8 +38,27 @@ else echo 'ERROR: wget or curl required' >&2; exit 1; fi
 [ ! -e "$DEST" ] && [ ! -L "$DEST" ] || { echo "ERROR: target already exists: $DEST" >&2; exit 1; }
 PARENT=$(dirname "$DEST")
 [ -d "$PARENT" ] && [ ! -L "$PARENT" ] || { echo 'ERROR: install parent must exist and not be a symlink' >&2; exit 1; }
+# A group-writable root:root directory is supported on Synology (for example,
+# /volume1/scripts mode 775). Do not allow arbitrary group write access:
+# a member of that group could replace the entire installed folder later.
+# Only group 0 (the root group) is treated as an administrative group here.
 PARENT_MODE=$(stat -c %a "$PARENT") || exit 1
-[ $((0$PARENT_MODE & 0022)) -eq 0 ] || { echo 'ERROR: install parent is group/other writable' >&2; exit 1; }
+case "$PARENT_MODE" in
+  ''|*[!0-7]*) echo 'ERROR: could not determine parent permissions' >&2; exit 1 ;;
+esac
+if [ $((0$PARENT_MODE & 0002)) -ne 0 ]; then
+  echo 'ERROR: install parent is world-writable' >&2
+  exit 1
+fi
+if [ $((0$PARENT_MODE & 0020)) -ne 0 ]; then
+  PARENT_UID=$(stat -c %u "$PARENT") || exit 1
+  PARENT_GID=$(stat -c %g "$PARENT") || exit 1
+  if [ "$PARENT_UID" != 0 ] || [ "$PARENT_GID" != 0 ]; then
+    echo 'ERROR: group-writable install parent must be owned by root:root (UID/GID 0)' >&2
+    exit 1
+  fi
+  echo 'WARNING: root:root install parent is group-writable; ensure group 0 has only trusted administrators.' >&2
+fi
 TEMP=$(mktemp -d "$PARENT/.drive-doctor-install.XXXXXXXX") || exit 1
 cleanup() { [ -n "${TEMP:-}" ] && [ -d "$TEMP" ] && rm -rf -- "$TEMP"; }
 trap cleanup EXIT HUP INT TERM
