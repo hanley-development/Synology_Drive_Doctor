@@ -68,7 +68,34 @@ smart_history() {
   local SELECTED_DISK; choose_disk || return 1
   command_read smartctl -d sat -l error "$SELECTED_DISK"
 }
-serial_bay_mapping() { list_disks; info 'Correlate physical bay by serial and the Synology slot identifier. /dev/sataN aliases can shift.'; }
+serial_bay_mapping() {
+  section 'SATA device identification (read-only)'
+  local d serial found=0
+  for d in /dev/sata[0-9]*; do
+    [[ "$d" =~ ^/dev/sata[0-9]+$ && -b "$d" ]] || continue
+    found=1
+    serial='unavailable'
+    if has smartctl; then
+      serial=$(smartctl -d sat -i "$d" 2>/dev/null | awk -F: '/^[[:space:]]*Serial Number:/ {sub(/^[[:space:]]*/, "", $2); print $2; exit}')
+      [[ -n "$serial" ]] || serial='unavailable'
+    fi
+    printf '%s  serial=%s\n' "$d" "$serial"
+  done
+  ((found)) || warn 'No SATA block devices available.'
+  if has synodisk; then
+    printf '\nDSM synodisk enumeration (slot IDs may be unknown/-1):\n'
+    synodisk --enum 2>&1 || warn 'synodisk enumeration failed'
+  fi
+  local bay slot enclosure_found=0
+  for bay in /sys/class/enclosure/*/*; do
+    [[ -d "$bay" && -r "$bay/slot" ]] || continue
+    enclosure_found=1
+    IFS= read -r slot < "$bay/slot"
+    printf 'Enclosure %s: slot=%s\n' "$bay" "$slot"
+  done
+  ((enclosure_found)) || info 'No readable sysfs enclosure slot mappings available.'
+  info 'Do not infer physical bay from /dev/sataN numbering or synodisk Slot id -1; correlate drive serial with DSM Storage Manager.'
+}
 show_kernel_errors() {
   section 'Current-boot storage error lines (read-only)'
   if has dmesg; then
@@ -112,16 +139,74 @@ show_volume_info() {
   if has df; then df -h 2>&1 || :; fi
   if has mount; then mount | grep -E '/volume[0-9]|cachedev' || :; fi
 }
+btrfs_counter_diff() {
+  local before="$1" after="$2"
+  awk '
+  FNR==NR {
+    if ($1 ~ /^\[[^]]+\]\.(read_io_errs|write_io_errs|flush_io_errs|corruption_errs|generation_errs)$/ && $2 ~ /^[0-9]+$/) old[$1]=$2
+    next
+  }
+  ($1 in old) && $2 ~ /^[0-9]+$/ {
+    seen++
+    if ($2 < old[$1]) {
+      printf "  %s: counter decreased/reset (comparison invalid)\n", $1
+      invalid++
+    } else if ($2 > old[$1]) {
+      printf "  %s: +%.0f\n", $1, $2-old[$1]
+      increased++
+    }
+  }
+  END {
+    if (!seen) print "  No comparable numeric counters (unavailable)."
+    else if (!increased && !invalid) print "  No increases observed in this short sample."
+  }
+    ' <(printf '%s\n' "$before") <(printf '%s\n' "$after")
+}
+
 show_btrfs() {
   section 'Btrfs device error counters (NO -z/reset)'
-  local v found=0
+  local v found=0 before after
   if ! has btrfs; then warn 'btrfs utility unavailable'; return 0; fi
+  info 'These counters are cumulative, not proof of a currently failing disk.'
   for v in /volume[0-9]*; do
     [[ -d "$v" ]] || continue
-    found=1; printf '\n%s:\n' "$v"; btrfs device stats "$v" 2>&1 || :
+    found=1
+    printf '\n%s:\n' "$v"
+    before=$(btrfs device stats "$v" 2>&1) || { printf '%s\n' "$before"; warn 'First Btrfs counter read failed'; continue; }
+    printf '%s\n' "$before"
+    sleep 2
+    after=$(btrfs device stats "$v" 2>&1) || { warn 'Second Btrfs counter read failed; no delta available'; continue; }
+    printf 'Counter changes during a 2-second read-only sample:\n'
+    btrfs_counter_diff "$before" "$after"
   done
-  ((found==1)) || warn 'No accessible /volumeN mounts.'
+  ((found)) || warn 'No accessible /volumeN mounts.'
+  info 'A short no-increase result does not exclude intermittent errors; compare longer-term observations if needed.'
 }
+show_drive_led_status() {
+  section 'Drive LED controller (read-only sysfs snapshot)'
+  local led brightness max_brightness trigger found=0 root="${1:-/sys/class/leds}"
+  for led in "$root"/syno_led*; do
+    [[ -d "$led" ]] || continue
+    if [[ ! -r "$led/brightness" ]]; then
+      warn "Unreadable LED state: ${led##*/}"
+      continue
+    fi
+    IFS= read -r brightness < "$led/brightness" || { warn "Could not read ${led##*/}"; continue; }
+    max_brightness='?'
+    if [[ -r "$led/max_brightness" ]]; then
+      IFS= read -r max_brightness < "$led/max_brightness" || max_brightness='?'
+    fi
+    trigger='unavailable'
+    if [[ -r "$led/trigger" ]]; then
+      IFS= read -r trigger < "$led/trigger" || trigger='unavailable'
+    fi
+    printf '%-12s brightness=%s/%s trigger=%s\n' "${led##*/}" "$brightness" "$max_brightness" "$trigger"
+    found=1
+  done
+  ((found != 0)) || info 'No readable syno_led* controls exposed; LED state unavailable.'
+  info 'Controller snapshot only: brightness/trigger may not match visible light; LED index, color and bay mapping are model-specific.'
+}
+
 show_quick_hints() {
   section 'Quick diagnosis hints'
   info 'RAID: compare [UUUU] member status with expected populated slots. An unpopulated bay is not necessarily a failed member.'
@@ -135,7 +220,7 @@ dashboard() {
   section 'System Health Dashboard — current observations'
   printf 'Hostname: %s\nNAS model: %s\n' "$(hostname)" "$(model_name)"
   dsm_version
-  printf '\n'; show_mdstat
+  printf '\n'; show_mdstat; show_md_health_summary
   printf '\n'; if has df; then df -h | grep -E '^Filesystem|/volume[0-9]' || :; fi
   printf '\n'; show_critical_summary
   printf '\n'; pool_fault_summary
@@ -146,7 +231,7 @@ full_report() {
   printf 'Hostname: %s\nModel: %s\n' "$(hostname)" "$(model_name)"
   dsm_version
   list_disks; smart_summary; smart_nvme
-  show_mdstat; show_md_detail; show_volume_info; show_btrfs; show_flashcache
+  show_mdstat; show_md_health_summary; show_md_detail; show_volume_info; show_btrfs; show_flashcache
   show_critical; show_pool_faults; recent_storage_logs; show_quick_hints
 }
 export_report() {
