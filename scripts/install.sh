@@ -57,7 +57,7 @@ if [ $((0$PARENT_MODE & 0020)) -ne 0 ]; then
     echo 'ERROR: group-writable install parent must be owned by root:root (UID/GID 0)' >&2
     exit 1
   fi
-  echo 'WARNING: root:root install parent is group-writable; ensure group 0 has only trusted administrators.' >&2
+  # Accepted root:root directory: no warning needed for a supported layout.
 fi
 TEMP=$(mktemp -d "$PARENT/.drive-doctor-install.XXXXXXXX") || exit 1
 cleanup() { [ -n "${TEMP:-}" ] && [ -d "$TEMP" ] && rm -rf -- "$TEMP"; }
@@ -115,4 +115,3 @@ find "$TEMP/stage" -type d -exec chmod 755 {} \;
 mv "$TEMP/stage" "$DEST"
 printf '\nInstalled to %s\n' "$DEST"
 printf 'Next (read-only): cd %s && bash -n syno_drive_doctor.sh lib/*.sh && bash syno_drive_doctor.sh health\n' "$DEST"
-printf 'WARNING: No DSM maintenance or repair action was executed.\n'

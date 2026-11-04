@@ -10,7 +10,7 @@ INSTALL = ROOT / 'scripts' / 'install.sh'
 
 
 class InstallerParentPermissions(unittest.TestCase):
-    def check_parent(self, mode, uid, gid, allow, warning=False):
+    def check_parent(self, mode, uid, gid, allow):
         with tempfile.TemporaryDirectory(prefix='drive-doctor-perms-') as tmp:
             work = pathlib.Path(tmp)
             parent = work / 'scripts'
@@ -59,12 +59,13 @@ class InstallerParentPermissions(unittest.TestCase):
             )
             self.assertEqual(calls.exists(), allow, f'{p.stdout}\n{p.stderr}')
             self.assertEqual(p.returncode, 23 if allow else 1, f'{p.stdout}\n{p.stderr}')
-            self.assertEqual('root:root install parent is group-writable' in p.stderr, warning)
+            self.assertNotIn('WARNING:', p.stderr)
+            self.assertNotIn('WARNING:', p.stdout)
             self.assertFalse((parent / 'fresh-install').exists())
             self.assertEqual(list(parent.iterdir()), [], 'temporary staging should be cleaned up')
 
-    def test_original_synology_root_root_775_allowed_with_warning(self):
-        self.check_parent('775', '0', '0', allow=True, warning=True)
+    def test_original_synology_root_root_775_allowed_quietly(self):
+        self.check_parent('775', '0', '0', allow=True)
 
     def test_standard_755_allowed(self):
         self.check_parent('755', '0', '0', allow=True)
